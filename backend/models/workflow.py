@@ -14,18 +14,18 @@ import sqlalchemy as sa
 
 class WorkflowType(str, Enum):
     """Types of workflows."""
-    INCIDENT_RESPONSE = "incident_response"
-    POSTMORTEM_PUBLISH = "postmortem_publish"
-    KB_SYNC = "kb_sync"
+    INCIDENT_RESPONSE = "INCIDENT_RESPONSE"
+    POSTMORTEM_PUBLISH = "POSTMORTEM_PUBLISH"
+    KB_SYNC = "KB_SYNC"
 
 
 class WorkflowStatus(str, Enum):
     """Workflow status states."""
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class Workflow(Base):

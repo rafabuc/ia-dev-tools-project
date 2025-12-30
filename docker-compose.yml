@@ -46,8 +46,9 @@ services:
         condition: service_started
     volumes:
       - ./backend:/app/backend
+      #- ./alembic.ini:/app/alembic.ini
     command: >
-      sh -c "alembic upgrade head &&
+      sh -c "pwd && ls -lrta && cd /app/backend && ls -lrta && alembic upgrade head && cd /app &&
              uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
     restart: unless-stopped
 

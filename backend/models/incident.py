@@ -15,18 +15,18 @@ from backend.models.base import Base
 
 class IncidentSeverity(str, PyEnum):
     """Enum for incident severity levels."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
 class IncidentStatus(str, PyEnum):
     """Enum for incident status."""
-    OPEN = "open"
-    INVESTIGATING = "investigating"
-    RESOLVED = "resolved"
-    CLOSED = "closed"
+    OPEN = "OPEN"
+    INVESTIGATING = "INVESTIGATING"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"
 
 
 class Incident(Base):

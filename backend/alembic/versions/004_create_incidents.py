@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column('title', sa.String(500), nullable=False),
         sa.Column('description', sa.Text, nullable=False),
         sa.Column('severity', sa.Enum('LOW', 'MEDIUM', 'HIGH', 'CRITICAL', name='incident_severity'), nullable=False),
-        sa.Column('status', sa.Enum('OPEN', 'INVESTIGATING', 'RESOLVED', 'CLOSED', name='incident_status'), nullable=False, server_default='open'),
+        sa.Column('status', sa.Enum('OPEN', 'INVESTIGATING', 'RESOLVED', 'CLOSED', name='incident_status'), nullable=False, server_default='OPEN'),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), onupdate=sa.text('now()'), nullable=False),
         sa.Column('resolved_at', sa.DateTime(timezone=True), nullable=True),
