@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.virtualenv
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Docker
+.dockerignore
+
+# Alembic
+*.pyc
+
+# Redis
+dump.rdb
+
+# ChromaDB
+chroma_data/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+ignore/**
+backend/venv/**
+
+.specify/**
+.claude/**
+specs/**
