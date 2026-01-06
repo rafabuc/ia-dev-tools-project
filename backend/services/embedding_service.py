@@ -96,8 +96,8 @@ class EmbeddingService:
         """
         logger.info(f"Embedding document for incident {incident_id}")
 
-        # Validate document
-        if not document or not document.strip():
+        # Validate document  TODO RBM
+        if not document: #or not document.strip():
             raise ValueError("Cannot embed empty document")
 
         # Prepare metadata

@@ -115,8 +115,9 @@ def generate_postmortem_sections(
 )
 def render_jinja_template(
     self: Task,
+    
+    sections: Dict[str, Any],
     incident_id: str,
-    sections: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Render postmortem template with generated sections.
@@ -134,6 +135,8 @@ def render_jinja_template(
         ValueError: If required fields are missing
         KeyError: If template variables are missing
     """
+    print("Rendering postmortem template for incident", incident_id)
+    print("Sections:", sections)
     logger.info(f"Rendering postmortem template for incident {incident_id}")
 
     # Validate required fields
@@ -191,8 +194,9 @@ def render_jinja_template(
 )
 def embed_in_chromadb(
     self: Task,
-    incident_id: str,
-    document: str
+    document: str,
+    incident_id: str
+   
 ) -> Dict[str, Any]:
     """
     Embed postmortem document in ChromaDB for searchability.
@@ -212,16 +216,17 @@ def embed_in_chromadb(
         Exception: If ChromaDB operation fails (will retry)
     """
     logger.info(f"Embedding postmortem in ChromaDB for incident {incident_id}")
-
+    print(f"Embedding postmortem in ChromaDB for incident {incident_id}")
+    print(f"Document: {document} type: {type(document)}")
     # Validate document
-    if not document or not document.strip():
+    if not document:#or not document.strip():
         raise ValueError("Cannot embed empty document")
 
     try:
         # Embed document in ChromaDB
         result = embedding_service.embed_document(
             incident_id=incident_id,
-            document=document,
+            document=document['rendered_document'],#document,
             metadata={
                 "document_type": "postmortem",
                 "incident_id": incident_id,
@@ -234,6 +239,7 @@ def embed_in_chromadb(
 
     except Exception as exc:
         logger.error(f"ChromaDB embedding failed for incident {incident_id}: {exc}")
+        print(f"ChromaDB embedding failed for incident {incident_id}: {exc}")
         raise self.retry(exc=exc, countdown=2 ** self.request.retries)
 
 
@@ -269,22 +275,26 @@ def notify_stakeholders(
     """
     logger.info(f"Notifying stakeholders about postmortem for incident {incident_id}")
 
+    print(f"Postmortem data: {postmortem_data} ++++++++++++++")
     # Validate required fields
+    #TODO RBM
+    '''
     if "github_url" not in postmortem_data:
         raise ValueError("Missing required field: github_url")
     if "summary" not in postmortem_data:
         raise ValueError("Missing required field: summary")
+    '''
 
     try:
         # Send notifications
         notification_payload = {
             "incident_id": incident_id,
-            "github_url": postmortem_data["github_url"],
-            "summary": postmortem_data["summary"],
+            #"github_url": postmortem_data["github_url"],
+            #"summary": postmortem_data["summary"],
             "notification_type": "postmortem_published"
         }
 
-        result = None#TODO RBM notification_service.send_notification(notification_payload)
+        result = notification_payload#None#TODO RBM notification_service.send_notification(notification_payload)
 
         logger.info(f"Successfully notified stakeholders for incident {incident_id}")
         return result

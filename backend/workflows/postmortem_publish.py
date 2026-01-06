@@ -53,14 +53,16 @@ def create_postmortem_workflow(incident_id: str) -> chain:
     generate_task = generate_postmortem_sections.s(incident_id)
 
     # Step 2: Render template (receives sections from step 1)
+    # Note: render_jinja_template now expects sections as first arg, incident_id as second
     render_task = render_jinja_template.s(incident_id)
 
     # Step 3: Parallel execution - create GitHub issue and embed in ChromaDB
     # Both tasks receive the rendered document from step 2
+    # We'll use a chord to ensure both complete before notification
     def create_parallel_tasks(render_result: Dict[str, Any]) -> group:
         """Create parallel tasks for GitHub issue and ChromaDB embedding."""
         rendered_document = render_result["rendered_document"]
-
+        
         # Create GitHub issue task
         # TODO RBM: 
         '''
@@ -70,13 +72,14 @@ def create_postmortem_workflow(incident_id: str) -> chain:
             body=rendered_document
         )
         '''
+        
         # Embed in ChromaDB task
         chromadb_task = embed_in_chromadb.s(
             incident_id=incident_id,
-            document=rendered_document
+            #document=rendered_document
         )
-
-        return group([ chromadb_task])#github_task
+        
+        return group([chromadb_task])  # github_task removed for now
 
     # Step 4: Notify stakeholders (receives results from parallel tasks)
     def create_notify_task(parallel_results: list) -> notify_stakeholders:
@@ -86,29 +89,33 @@ def create_postmortem_workflow(incident_id: str) -> chain:
         Args:
             parallel_results: List containing [github_result, chromadb_result]
         """
-        github_result = parallel_results[0]
-        chromadb_result = parallel_results[1]
-
+        # For now, just return a dummy task since we don't have github_result
+        # github_result = parallel_results[0]  # Would be from create_github_issue
+        chromadb_result = parallel_results[0]  # Only chromadb_task
+        
         postmortem_data = {
-            "github_url": github_result["issue_url"],
+            "github_url": "https://github.com/example/issues/1",  # Placeholder
             "summary": f"Postmortem published for incident {incident_id}"
         }
-
+        
         return notify_stakeholders.s(incident_id, postmortem_data)
 
     # Compose the workflow chain
-    # Note: We use a simpler chain structure that Celery can handle
+    # Using chain with intermediate task to handle parallel execution
+    from celery import chord
+    
     workflow = chain(
         generate_task,
         render_task,
-        # For parallel execution, we'll use a chord structure
-        # chord waits for all tasks in the group to complete before calling callback
-        group(
-            create_github_issue.s(incident_id, f"Postmortem: Incident {incident_id[:8]}", None),
-            embed_in_chromadb.s(incident_id, None)
+        chord(
+            group(
+                # create_github_issue.s(incident_id, f"Postmortem: Incident {incident_id[:8]}", None),
+                embed_in_chromadb.s(incident_id)
+            ),
+            notify_stakeholders.s(incident_id)
         )
     )
-
+    
     logger.info(f"Postmortem workflow created for incident {incident_id}")
     return workflow
 
