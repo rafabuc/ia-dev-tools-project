@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.workflows.incident_response import create_incident_workflow
+from backend.workflows.postmortem_publish import trigger_postmortem_workflow
 from backend.services.workflow_service import WorkflowService
 from backend.services.workflow_cache import WorkflowCache
 from backend.models.workflow import WorkflowStatus, WorkflowType
@@ -238,4 +239,108 @@ async def get_workflow_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve workflow status: {str(e)}"
+        )
+
+
+@router.post("/postmortem/{incident_id}", response_model=WorkflowResponse, status_code=status.HTTP_202_ACCEPTED)
+async def trigger_postmortem(
+    incident_id: str,
+    db: Session = Depends(get_db_session)
+) -> WorkflowResponse:
+    """
+    Trigger automated postmortem generation and publishing workflow.
+
+    Workflow steps:
+    1. Generate postmortem sections using Claude API
+    2. Render Jinja2 template
+    3. Parallel execution:
+       - Create GitHub issue
+       - Embed in ChromaDB
+    4. Notify stakeholders
+
+    Note: Incident must be resolved before triggering postmortem workflow.
+    """
+    correlation_id = set_correlation_id()
+    logger.info(
+        "trigger_postmortem_workflow_requested",
+        incident_id=incident_id,
+        correlation_id=correlation_id
+    )
+
+    try:
+        # Validate UUID
+        incident_uuid = uuid.UUID(incident_id)
+
+        # Create workflow service
+        workflow_service = WorkflowService(db)
+
+        # Create workflow record in database
+        workflow = workflow_service.create_workflow(
+            workflow_type=WorkflowType.POSTMORTEM_PUBLISH,
+            triggered_by="api",
+            incident_id=incident_uuid,
+            workflow_data={
+                "incident_id": incident_id,
+                "workflow_type": "postmortem"
+            }
+        )
+
+        # Trigger Celery workflow
+        task_id = trigger_postmortem_workflow(incident_id)
+
+        # Update workflow with Celery task ID
+        workflow_service.update_workflow_data(
+            workflow.id,
+            {"celery_chain_id": task_id}
+        )
+
+        # Cache workflow state for fast retrieval
+        cache = WorkflowCache()
+        cache.set_workflow_state(
+            workflow.id,
+            {
+                "id": str(workflow.id),
+                "type": workflow.type.value,
+                "status": workflow.status.value,
+                "progress": "0/4 steps completed",
+                "current_step": "generate_postmortem_sections"
+            }
+        )
+
+        logger.info(
+            "trigger_postmortem_workflow_success",
+            workflow_id=str(workflow.id),
+            celery_task_id=task_id,
+            correlation_id=correlation_id
+        )
+
+        return WorkflowResponse(
+            workflow_id=str(workflow.id),
+            type=workflow.type.value,
+            status=workflow.status.value,
+            created_at=workflow.created_at.isoformat(),
+            message="Postmortem publish workflow triggered successfully"
+        )
+
+    except ValueError as exc:
+        logger.error(
+            "trigger_postmortem_workflow_validation_failed",
+            incident_id=incident_id,
+            error=str(exc),
+            correlation_id=correlation_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
+    except Exception as exc:
+        logger.error(
+            "trigger_postmortem_workflow_failed",
+            incident_id=incident_id,
+            error=str(exc),
+            correlation_id=correlation_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to trigger postmortem workflow: {str(exc)}"
         )

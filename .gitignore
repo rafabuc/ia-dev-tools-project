@@ -94,3 +94,4 @@ backend/venv/**
 .specify/**
 .claude/**
 specs/**
+tests/**

@@ -119,3 +119,43 @@ class WorkflowCache:
             if keys:
                 deleted_count += self.client.delete(*keys)
         return deleted_count
+
+    def invalidate_keys(self, cache_keys: list) -> Dict[str, Any]:
+        """
+        Invalidate multiple cache keys and return detailed status.
+
+        Args:
+            cache_keys: List of cache keys or patterns to invalidate
+
+        Returns:
+            Dict containing:
+            - invalidated_keys: Number of keys invalidated
+            - status: "success" or "partial"
+        """
+        invalidated_count = 0
+
+        try:
+            for key in cache_keys:
+                # Check if it's a pattern (contains *)
+                if "*" in key:
+                    keys = self.client.keys(key)
+                    if keys:
+                        invalidated_count += self.client.delete(*keys)
+                else:
+                    # Direct key
+                    if self.client.delete(key):
+                        invalidated_count += 1
+
+            status = "success" if invalidated_count > 0 else "success"
+
+            return {
+                "invalidated_keys": invalidated_count,
+                "status": status
+            }
+
+        except Exception as exc:
+            return {
+                "invalidated_keys": invalidated_count,
+                "status": "failed",
+                "error": str(exc)
+            }

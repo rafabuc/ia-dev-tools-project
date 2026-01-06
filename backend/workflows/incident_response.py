@@ -70,14 +70,15 @@ def create_incident_workflow(
         # Step 3: Search for related runbooks (3 retries)
         search_related_runbooks.s(f"{title} {description}"),
 
+        #TODO RBM
         # Step 4: Create GitHub tracking issue (3 retries)
-        create_github_issue.s(
-            title=f"[INCIDENT] {title}",
-            body=f"## Description\n{description}\n\n## Severity\n{severity}"
-        ),
+        #create_github_issue.s(
+        #    title=f"[INCIDENT] {title}",
+        #    body=f"## Description\n{description}\n\n## Severity\n{severity}"
+        #),
 
         # Step 5: Send notifications (3 retries)
-        send_notification.s(f"Incident workflow completed for: {title}")
+        #send_notification.s(f"Incident workflow completed for: {title}")
     )
 
     # Filter out None values (for optional steps like analyze_logs)

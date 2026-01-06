@@ -116,6 +116,28 @@ async def shutdown_event():
     """Cleanup on shutdown."""
     logger.info("Shutting down DevOps Copilot")
 
+
+@app.get("/debug/routes")
+async def debug_routes():
+    """Endpoint para depurar rutas registradas."""
+    routes = []
+    for route in app.routes:
+        route_info = {
+            "path": route.path,
+            "methods": getattr(route, "methods", []),
+            "name": getattr(route, "name", ""),
+            "endpoint": str(getattr(route, "endpoint", "")),
+        }
+        routes.append(route_info)
+    
+    # Filtrar solo las rutas de workflows
+    workflow_routes = [r for r in routes if "/workflows" in r["path"]]
+    
+    return {
+        "all_routes": routes,
+        "workflow_routes": workflow_routes
+    }
+    
 # Development server
 if __name__ == "__main__":
     uvicorn.run(

@@ -1,0 +1,63 @@
+# Postmortem: {{ incident_title }}
+
+**Incident ID**: {{ incident_id }}
+**Date**: {{ date }}
+**Severity**: {{ severity }}
+**Duration**: {{ duration }}
+
+---
+
+## Summary
+
+{{ summary }}
+
+---
+
+## Timeline
+
+{% for event in timeline %}
+- **{{ event.time }}** - {{ event.event }}
+{% endfor %}
+
+---
+
+## Root Cause
+
+{{ root_cause }}
+
+---
+
+## Impact
+
+{{ impact }}
+
+---
+
+## Resolution
+
+{{ resolution }}
+
+---
+
+## Lessons Learned
+
+{% for lesson in lessons_learned %}
+- {{ lesson }}
+{% endfor %}
+
+---
+
+## Action Items
+
+{% if action_items %}
+{% for item in action_items %}
+- [ ] {{ item }}
+{% endfor %}
+{% else %}
+*No action items specified*
+{% endif %}
+
+---
+
+**Generated**: {{ generated_at }}
+**Status**: {{ status }}

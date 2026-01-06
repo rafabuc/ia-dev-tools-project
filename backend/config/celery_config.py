@@ -14,7 +14,7 @@ from typing import Dict, Any
 from kombu import Queue
 
 
-def get_celery_config() -> Dict[str, Any]:
+def  get_celery_config() -> Dict[str, Any]:
     """
     Get Celery configuration from environment variables.
 

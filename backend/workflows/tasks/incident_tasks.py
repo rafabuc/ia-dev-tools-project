@@ -16,6 +16,12 @@ from datetime import datetime
 from celery import Task
 from backend.celery_app import app
 from backend.utils.logging import get_logger, set_correlation_id, log_workflow_event
+from backend.database import SessionLocal
+from backend.models.incident import Incident, IncidentSeverity, IncidentStatus
+from backend.utils.log_parser import LogParser, LogParseError
+from backend.services.embedding_service import embedding_service
+from backend.integrations.github_client import GitHubClient, GitHubAPIError
+from backend.services.notification_service import NotificationService, NotificationError
 #from backend.utils.retry import exponential_backoff_with_jitter
 
 logger = get_logger(__name__)
@@ -51,22 +57,34 @@ def create_incident_record(
     correlation_id = set_correlation_id()
     logger.info("create_incident_record_started", title=title, severity=severity, correlation_id=correlation_id)
 
+    db = SessionLocal()
     try:
-        # TODO: Implement database write (requires SQLAlchemy session)
-        incident_id = uuid.uuid4()
-        created_at = datetime.utcnow().isoformat()
+        # Create incident in database
+        incident = Incident(
+            title=title,
+            description=description,
+            severity=IncidentSeverity[severity.upper()],
+            status=IncidentStatus.OPEN
+        )
+
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
 
         result = {
-            "incident_id": str(incident_id),
-            "created_at": created_at
+            "incident_id": str(incident.id),
+            "created_at": incident.created_at.isoformat()
         }
 
-        logger.info("create_incident_record_completed", incident_id=str(incident_id))
+        logger.info("create_incident_record_completed", incident_id=str(incident.id))
         return result
 
     except Exception as e:
+        db.rollback()
         logger.error("create_incident_record_failed", error=str(e))
         raise
+    finally:
+        db.close()
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=1, name="workflows.analyze_logs_async")
@@ -97,16 +115,19 @@ def analyze_logs_async(
     logger.info("analyze_logs_async_started", incident_id=incident_id, log_file=log_file_path)
 
     try:
-        # TODO: Implement log parsing (requires log_parser utility)
-        result = {
-            "errors_found": 0,
-            "timeline": [],
-            "patterns": []
-        }
+        # Parse log file using log parser utility
+        parser = LogParser(log_format="standard")
+        result = parser.parse_file(log_file_path)
 
         logger.info("analyze_logs_async_completed", incident_id=incident_id, errors_found=result["errors_found"])
         return result
 
+    except FileNotFoundError as e:
+        logger.error("analyze_logs_async_file_not_found", incident_id=incident_id, error=str(e))
+        raise
+    except LogParseError as e:
+        logger.error("analyze_logs_async_parse_error", incident_id=incident_id, error=str(e))
+        raise
     except Exception as e:
         logger.error("analyze_logs_async_failed", incident_id=incident_id, error=str(e))
         # Retry with exponential backoff
@@ -143,9 +164,24 @@ def search_related_runbooks(
     logger.info("search_related_runbooks_started", incident_id=incident_id, query=error_summary)
 
     try:
-        # TODO: Implement ChromaDB query (requires embedding service)
+        # Query ChromaDB for relevant runbooks using embedding service
+        similar_docs = embedding_service.search_similar_documents(
+            query=error_summary,
+            n_results=limit
+        )
+
+        # Transform results to match expected format
+        runbooks = []
+        for doc in similar_docs:
+            metadata = doc.get("metadata", {})
+            runbooks.append({
+                "title": metadata.get("title", "Unknown"),
+                "category": metadata.get("category", "general"),
+                "relevance_score": 1.0 - doc.get("distance", 1.0)  # Convert distance to similarity score
+            })
+
         result = {
-            "runbooks": []
+            "runbooks": runbooks
         }
 
         logger.info("search_related_runbooks_completed", incident_id=incident_id, runbooks_found=len(result["runbooks"]))
@@ -189,15 +225,25 @@ def create_github_issue(
     logger.info("create_github_issue_started", incident_id=incident_id, title=title)
 
     try:
-        # TODO: Implement GitHub API call (requires github_client)
+        # Create GitHub issue using GitHub client
+        github_client = GitHubClient()
+        issue_data = github_client.create_issue(
+            title=title,
+            body=body,
+            labels=labels
+        )
+
         result = {
-            "issue_url": "https://github.com/example/repo/issues/1",
-            "issue_number": 1
+            "issue_url": issue_data["html_url"],
+            "issue_number": issue_data["number"]
         }
 
         logger.info("create_github_issue_completed", incident_id=incident_id, issue_number=result["issue_number"])
         return result
 
+    except GitHubAPIError as e:
+        logger.error("create_github_issue_api_error", incident_id=incident_id, error=str(e))
+        raise self.retry(exc=e)
     except Exception as e:
         logger.error("create_github_issue_failed", incident_id=incident_id, error=str(e))
         raise self.retry(exc=e)
@@ -234,15 +280,25 @@ def send_notification(
     logger.info("send_notification_started", incident_id=incident_id, channels=channels)
 
     try:
-        # TODO: Implement notification service (requires notification_service)
+        # Send notification using notification service
+        notification_service = NotificationService()
+        notification_result = notification_service.send(
+            message=message,
+            channels=channels,
+            metadata={"incident_id": incident_id}
+        )
+
         result = {
-            "sent_to": channels,
-            "status": "success"
+            "sent_to": notification_result["sent_to"],
+            "status": notification_result["status"]
         }
 
         logger.info("send_notification_completed", incident_id=incident_id, status=result["status"])
         return result
 
+    except NotificationError as e:
+        logger.error("send_notification_error", incident_id=incident_id, error=str(e))
+        raise self.retry(exc=e)
     except Exception as e:
         logger.error("send_notification_failed", incident_id=incident_id, error=str(e))
         raise self.retry(exc=e)

@@ -27,7 +27,39 @@ services:
     command: redis-server --appendonly yes
     restart: unless-stopped
 
-# FastAPI Application
+
+
+
+  chromadb:
+    image: ghcr.io/chroma-core/chroma:0.5.6
+    #chromadb/chroma:0.4.22    
+    container_name: chromadb
+    ports:
+      - "8001:8000"
+    environment:
+      #- CHROMA_SERVER_AUTH_CREDENTIALS=admin:admin
+      #- CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.providers.HtpasswdFileServerAuthCredentialsProvider
+      #- CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER=Authorization
+      #- CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token_authn.TokenAuthenticationServerProvider
+      #- CHROMA_AUTH_TOKEN_TRANSPORT_HEADER=Authorization
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chromadb/chroma
+      - CHROMA_SERVER_ALLOW_RESET=TRUE
+    volumes:
+      - chroma_data:/chromadb/chroma
+      - ./htpasswd:/chromadb/htpasswd  # Mount your htpasswd file
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    #networks:
+    #  - chroma-network
+
+
   backend:
     build: 
       context: .
@@ -39,10 +71,14 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - REDIS_URL=redis://redis:6379/0
+      - ANTHROPIC_API_KEY=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
+
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      chromadb:
         condition: service_started
     volumes:
       - ./backend:/app/backend
@@ -62,9 +98,13 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - REDIS_URL=redis://redis:6379/0
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - ANTHROPIC_API_KEY=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
     depends_on:
       - postgres
       - redis
+      - chromadb
     volumes:
       - ./backend:/app/backend
     command: >
@@ -96,6 +136,8 @@ volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
+  chroma_data:
+    driver: local
 
 networks:
   default:
