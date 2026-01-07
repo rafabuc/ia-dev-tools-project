@@ -195,9 +195,9 @@ def search_related_runbooks(
 @app.task(bind=True, max_retries=3, default_retry_delay=4, name="workflows.create_github_issue")
 def create_github_issue(
     self: Task,
+    body: Dict[str, Any],
     incident_id: str,
     title: str,
-    body: str,
     labels: List[str] = None
 ) -> Dict[str, Any]:
     """
@@ -213,12 +213,26 @@ def create_github_issue(
     Returns:
         Dict[str, Any]: {
             "issue_url": "https://github.com/...",
-            "issue_number": 123
+            "issue_number": 123,
+            "skipped": False
+        }
+        Or if disabled:
+        {
+            "skipped": True,
+            "reason": "GitHub integration is disabled"
         }
 
     Raises:
         GitHubAPIError: If issue creation fails
     """
+
+    #print(f"create_github_issue_debug incident_id_type {type(incident_id).__name__}, title_type {type(title).__name__}, body_type {type(body).__name__}, labels_type {type(labels).__name__}")
+
+    #print(f"create_github_issue_started incident_id {type(incident_id)} {incident_id}")
+    #print(f"create_github_issue_started title {type(title)} {title}")
+    #print(f" create_github_issue_started labels {type(labels)} {labels}")
+    #print(f" create_github_issue_started body {type(body)} {body}")
+
     if labels is None:
         labels = ["incident"]
 
@@ -227,15 +241,30 @@ def create_github_issue(
     try:
         # Create GitHub issue using GitHub client
         github_client = GitHubClient()
+        
+        # Check if GitHub is enabled
+        if not github_client.is_enabled():
+            logger.info("create_github_issue_skipped", incident_id=incident_id, reason="GitHub disabled")
+            return {
+                "skipped": True,
+                "reason": "GitHub integration is disabled"
+            }
+        
         issue_data = github_client.create_issue(
             title=title,
-            body=body,
+            body=body["rendered_document"],
             labels=labels
         )
 
+        # Handle skipped case
+        if issue_data.get("skipped"):
+            logger.info("create_github_issue_skipped", incident_id=incident_id)
+            return issue_data
+
         result = {
             "issue_url": issue_data["html_url"],
-            "issue_number": issue_data["number"]
+            "issue_number": issue_data["number"],
+            "skipped": False
         }
 
         logger.info("create_github_issue_completed", incident_id=incident_id, issue_number=result["issue_number"])
@@ -247,7 +276,6 @@ def create_github_issue(
     except Exception as e:
         logger.error("create_github_issue_failed", incident_id=incident_id, error=str(e))
         raise self.retry(exc=e)
-
 
 @app.task(bind=True, max_retries=3, default_retry_delay=1, name="workflows.send_notification")
 def send_notification(

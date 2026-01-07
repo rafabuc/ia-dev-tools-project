@@ -76,7 +76,7 @@ async def health_check():
     # Check Redis (Celery broker)
     try:
         import redis
-        r = redis.Redis(host='localhost', port=6379, db=0, socket_timeout=1)
+        r = redis.Redis(host='redis', port=6379, db=0, socket_timeout=1)
         r.ping()
         health_status["dependencies"]["redis"] = "healthy"
     except Exception as e:

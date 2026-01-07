@@ -38,15 +38,19 @@ def execute_search_related_runbooks(error_summary, limit=5):
         for doc in similar_docs:
             metadata = doc.get("metadata", {})
             runbooks.append({
-                "title": metadata.get("title", "Unknown"),
-                "category": metadata.get("category", "general"),
+                "id": doc.get("id", "Unknown"),
+                #"document": doc.get("document", "Unknown"),
+                "metadata": doc.get("metadata", {}),
+                #"title": metadata.get("title", "Unknown"),
+                #"category": metadata.get("category", "general"),
                 "relevance_score": 1.0 - doc.get("distance", 1.0)  # Convert distance to similarity score
             })
 
         result = {
             "runbooks": runbooks
         }
-
+    
+        print(f'*********************************runbooks: {runbooks} *********************************')
 
 
         stats = embedding_service.get_collection_stats()
@@ -59,4 +63,4 @@ def execute_search_related_runbooks(error_summary, limit=5):
         print(e)
 
 
-execute_search_related_runbooks('test')
+execute_search_related_runbooks('User Profile Service experienced a memory leak')

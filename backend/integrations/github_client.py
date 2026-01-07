@@ -29,6 +29,11 @@ class GitHubAPIError(Exception):
     pass
 
 
+class GitHubDisabledError(Exception):
+    """Exception raised when GitHub integration is disabled."""
+    pass
+
+
 class CircuitBreaker:
     """
     Circuit breaker for protecting against cascading failures.
@@ -132,7 +137,8 @@ class GitHubClient:
         self,
         token: Optional[str] = None,
         repo: Optional[str] = None,
-        base_url: str = "https://api.github.com"
+        base_url: str = "https://api.github.com",
+        enabled: Optional[bool] = None
     ):
         """
         Initialize GitHub client.
@@ -141,10 +147,23 @@ class GitHubClient:
             token: GitHub API token (defaults to env GITHUB_TOKEN)
             repo: Repository in format "owner/repo" (defaults to env GITHUB_REPO)
             base_url: GitHub API base URL
+            enabled: Whether GitHub integration is enabled (defaults to env GITHUB_ENABLED)
         """
+        # Check if GitHub integration is enabled
+        if enabled is None:
+            enabled_env = os.getenv("GITHUB_ENABLED", "false").lower()
+            self.enabled = enabled_env in ("true", "1", "yes", "on")
+        else:
+            self.enabled = enabled
+        
         self.token = token or os.getenv("GITHUB_TOKEN")
         self.repo = repo or os.getenv("GITHUB_REPO")
         self.base_url = base_url
+
+        # Log configuration status
+        if not self.enabled:
+            logger.info("github_client_disabled", message="GitHub integration is disabled")
+            return
 
         if not self.token:
             logger.warning("github_client_no_token", message="GITHUB_TOKEN not configured")
@@ -163,6 +182,11 @@ class GitHubClient:
             "Authorization": f"token {self.token}",
             "Accept": "application/vnd.github.v3+json"
         })
+
+    def _check_enabled(self):
+        """Check if GitHub integration is enabled."""
+        if not self.enabled:
+            raise GitHubDisabledError("GitHub integration is disabled")
 
     def create_issue(
         self,
@@ -184,12 +208,27 @@ class GitHubClient:
             Dict[str, Any]: {
                 "html_url": "https://github.com/owner/repo/issues/123",
                 "number": 123,
-                "state": "open"
+                "state": "open",
+                "skipped": False
+            }
+            Or if disabled:
+            {
+                "skipped": True,
+                "reason": "GitHub integration is disabled"
             }
 
         Raises:
+            GitHubDisabledError: If GitHub integration is disabled
             GitHubAPIError: If issue creation fails
         """
+        # Check if enabled
+        if not self.enabled:
+            logger.info("github_create_issue_skipped", reason="GitHub integration disabled")
+            return {
+                "skipped": True,
+                "reason": "GitHub integration is disabled"
+            }
+
         if not self.repo:
             raise GitHubAPIError("GitHub repository not configured")
 
@@ -218,7 +257,8 @@ class GitHubClient:
                 return {
                     "html_url": data["html_url"],
                     "number": data["number"],
-                    "state": data["state"]
+                    "state": data["state"],
+                    "skipped": False
                 }
 
             except RequestException as e:
@@ -242,8 +282,11 @@ class GitHubClient:
             Dict[str, Any]: Issue details
 
         Raises:
+            GitHubDisabledError: If GitHub integration is disabled
             GitHubAPIError: If request fails
         """
+        self._check_enabled()
+        
         if not self.repo:
             raise GitHubAPIError("GitHub repository not configured")
 
@@ -257,3 +300,12 @@ class GitHubClient:
                 raise GitHubAPIError(f"GitHub API request failed: {str(e)}")
 
         return self.circuit_breaker.call(_get)
+
+    def is_enabled(self) -> bool:
+        """
+        Check if GitHub integration is enabled.
+
+        Returns:
+            bool: True if enabled, False otherwise
+        """
+        return self.enabled

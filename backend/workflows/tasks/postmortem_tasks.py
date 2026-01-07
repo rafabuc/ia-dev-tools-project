@@ -135,8 +135,8 @@ def render_jinja_template(
         ValueError: If required fields are missing
         KeyError: If template variables are missing
     """
-    print("Rendering postmortem template for incident", incident_id)
-    print("Sections:", sections)
+    print("render_jinja_template Rendering postmortem template for incident", incident_id)
+    #print("render_jinja_template Sections:", sections)
     logger.info(f"Rendering postmortem template for incident {incident_id}")
 
     # Validate required fields
@@ -176,7 +176,7 @@ def render_jinja_template(
 
         # Render template
         rendered_document = template_service.render_postmortem(template_context)
-        print(f"Rendered document: {rendered_document}")
+        #print(f"render_jinja_template Rendered document: {rendered_document}")
         logger.info(f"Successfully rendered postmortem for incident {incident_id}")
         return {
             "rendered_document": rendered_document,
@@ -217,7 +217,7 @@ def embed_in_chromadb(
     """
     logger.info(f"Embedding postmortem in ChromaDB for incident {incident_id}")
     print(f"Embedding postmortem in ChromaDB for incident {incident_id}")
-    print(f"Document: {document} type: {type(document)}")
+    print(f"Document: document type: {type(document)}")
     # Validate document
     if not document:#or not document.strip():
         raise ValueError("Cannot embed empty document")

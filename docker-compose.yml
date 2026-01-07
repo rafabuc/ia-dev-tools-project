@@ -72,6 +72,9 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - REDIS_URL=redis://redis:6379/0
       - ANTHROPIC_API_KEY=
+      - GITHUB_TOKEN=
+      - GITHUB_REPO=rafabuc/ia-dev-tools-project
+      - GITHUB_ENABLED=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -100,11 +103,16 @@ services:
       - CHROMADB_HOST=chromadb
       - CHROMADB_PORT=8000
       - ANTHROPIC_API_KEY=
-
+      - GITHUB_TOKEN=
+      - GITHUB_REPO=rafabuc/ia-dev-tools-project
+      - GITHUB_ENABLED=true
     depends_on:
-      - postgres
-      - redis
-      - chromadb
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chromadb:
+        condition: service_started
     volumes:
       - ./backend:/app/backend
     command: >
