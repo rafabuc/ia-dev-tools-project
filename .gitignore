@@ -57,8 +57,8 @@ htmlcov/
 *.sqlite3
 
 # Logs
-*.log
-logs/
+#*.log
+#logs/
 
 # OS
 .DS_Store
@@ -94,6 +94,5 @@ backend/venv/**
 .specify/**
 .claude/**
 specs/**
-tests/**
 
 docker-compose.yml

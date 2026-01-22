@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend.workflows.incident_response import create_incident_workflow
 from backend.workflows.postmortem_publish import trigger_postmortem_workflow
+from backend.workflows.kb_sync import trigger_kb_sync_workflow
 from backend.services.workflow_service import WorkflowService
 from backend.services.workflow_cache import WorkflowCache
 from backend.models.workflow import WorkflowStatus, WorkflowType
@@ -343,4 +344,135 @@ async def trigger_postmortem(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to trigger postmortem workflow: {str(exc)}"
+        )
+
+
+class KBSyncRequest(BaseModel):
+    """Request model for KB sync workflow trigger."""
+    runbooks_dir: str = Field(..., description="Path to runbooks directory to scan")
+    triggered_by: Optional[str] = Field(None, description="User/system identifier")
+
+
+@router.post("/kb-sync", response_model=WorkflowResponse, status_code=status.HTTP_202_ACCEPTED)
+async def trigger_kb_sync(
+    request: KBSyncRequest,
+    db: Session = Depends(get_db_session)
+) -> WorkflowResponse:
+    """
+    Trigger knowledge base synchronization workflow.
+
+    Workflow steps:
+    1. Scan runbooks directory for all files
+    2. Detect changes (added/modified/deleted)
+    3. Regenerate embeddings in parallel for changed files
+    4. Batch update ChromaDB
+    5. Invalidate caches
+
+    Note: Only one KB sync can run at a time (concurrency lock).
+    """
+    correlation_id = set_correlation_id()
+    logger.info(
+        "trigger_kb_sync_workflow_requested",
+        runbooks_dir=request.runbooks_dir,
+        correlation_id=correlation_id
+    )
+
+    # Acquire lock to prevent concurrent KB sync operations
+    cache = WorkflowCache()
+    lock = cache.acquire_lock("kb_sync", timeout_seconds=600, blocking_timeout=0)
+
+    if not lock:
+        logger.warning(
+            "trigger_kb_sync_workflow_locked",
+            runbooks_dir=request.runbooks_dir,
+            correlation_id=correlation_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="KB sync workflow is already running. Please wait for it to complete."
+        )
+
+    try:
+        # Create workflow service
+        workflow_service = WorkflowService(db)
+
+        # Create workflow record in database
+        workflow = workflow_service.create_workflow(
+            workflow_type=WorkflowType.KB_SYNC,
+            triggered_by=request.triggered_by or "api",
+            workflow_data={
+                "runbooks_dir": request.runbooks_dir,
+                "workflow_type": "kb_sync"
+            }
+        )
+
+        # Trigger Celery workflow
+        task_id = trigger_kb_sync_workflow(request.runbooks_dir)
+
+        # Update workflow with Celery task ID and lock info
+        workflow_service.update_workflow_data(
+            workflow.id,
+            {
+                "celery_chain_id": task_id,
+                "has_lock": True,
+                "lock_acquired_at": correlation_id
+            }
+        )
+
+        # Cache workflow state for fast retrieval
+        cache.set_workflow_state(
+            workflow.id,
+            {
+                "id": str(workflow.id),
+                "type": workflow.type.value,
+                "status": workflow.status.value,
+                "progress": "0/5 steps completed",
+                "current_step": "scan_runbooks_dir"
+            }
+        )
+
+        logger.info(
+            "trigger_kb_sync_workflow_success",
+            workflow_id=str(workflow.id),
+            celery_task_id=task_id,
+            correlation_id=correlation_id
+        )
+
+        # Note: Lock will be released automatically after timeout (600s)
+        # or when workflow completes via a callback mechanism
+        # For now, we rely on the timeout mechanism
+
+        return WorkflowResponse(
+            workflow_id=str(workflow.id),
+            type=workflow.type.value,
+            status=workflow.status.value,
+            created_at=workflow.created_at.isoformat(),
+            message="Knowledge base sync workflow triggered successfully"
+        )
+
+    except FileNotFoundError as exc:
+        # Release lock on error
+        cache.release_lock(lock)
+        logger.error(
+            "trigger_kb_sync_workflow_validation_failed",
+            runbooks_dir=request.runbooks_dir,
+            error=str(exc),
+            correlation_id=correlation_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        )
+    except Exception as exc:
+        # Release lock on error
+        cache.release_lock(lock)
+        logger.error(
+            "trigger_kb_sync_workflow_failed",
+            runbooks_dir=request.runbooks_dir,
+            error=str(exc),
+            correlation_id=correlation_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to trigger KB sync workflow: {str(exc)}"
         )

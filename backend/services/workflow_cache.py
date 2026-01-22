@@ -159,3 +159,61 @@ class WorkflowCache:
                 "status": "failed",
                 "error": str(exc)
             }
+
+    def acquire_lock(
+        self,
+        lock_name: str,
+        timeout_seconds: int = 600,
+        blocking_timeout: Optional[int] = None
+    ) -> Optional[redis.lock.Lock]:
+        """
+        Acquire a distributed lock using Redis.
+
+        Args:
+            lock_name: Name of the lock (e.g., "kb_sync")
+            timeout_seconds: Lock timeout in seconds (default: 10 minutes)
+            blocking_timeout: Time to wait for lock acquisition (None = non-blocking)
+
+        Returns:
+            Lock object if acquired, None if lock couldn't be acquired
+
+        Example:
+            lock = cache.acquire_lock("kb_sync", timeout_seconds=600)
+            if lock:
+                try:
+                    # Do work
+                    pass
+                finally:
+                    lock.release()
+        """
+        lock_key = f"lock:{lock_name}"
+
+        try:
+            lock = self.client.lock(
+                lock_key,
+                timeout=timeout_seconds,
+                blocking_timeout=blocking_timeout
+            )
+
+            if lock.acquire(blocking=blocking_timeout is not None):
+                return lock
+            return None
+
+        except Exception:
+            return None
+
+    def release_lock(self, lock: redis.lock.Lock) -> bool:
+        """
+        Release a distributed lock.
+
+        Args:
+            lock: Lock object to release
+
+        Returns:
+            bool: True if released successfully, False otherwise
+        """
+        try:
+            lock.release()
+            return True
+        except Exception:
+            return False
